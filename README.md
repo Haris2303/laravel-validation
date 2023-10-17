@@ -100,3 +100,38 @@ $validator = Validator::make($data, $rules);
 $this->assertTrue($validator->passes());
 $this->assertFalse($validator->fails());
 ```
+
+## Error Message
+
+Saat ini kita melakukan validasi, kita perlu tahu key mana yang bermasalah dan apa pesan error nya. Kita bisa mendapatkan detail dari error menggunakan function `messages()`, `errors()`, atau `getMessageBag()`, dimana semuanya akan mengembalikkan object yang sama yaitu class [`MessageBag`](https://laravel.com/api/10.x/Illuminate/Support/MassageBag.html).
+
+```php
+$validator = Validator::make($data, $rules);
+$this->assertNotNull($validator);
+
+$message = $validator->getMessageBag();
+$message->keys();
+
+Log::info($message->toJson(JSON_PRETTY_PRINT));
+```
+
+## Validation Exception
+
+Pada beberapa kasus, kadang-kadang kita ingin menggunakan Exception ketika melakukan validasi. Jika data tidak valid, maka harapan kita terjadi Exception. Validator juga menyediakan fitur ini, dengan menggunakan method `validated()`.
+
+Saat kita memanggil method `validated()`, jika data tidak valid, maka akan throw [`ValidationException`](https://laravel.com/api/10.x/Illuminate/Validation/ValidationException.html). Untuk mendapatkan detail informasi validator dan error message, bisa kita ambil dari [`ValidationException`](https://laravel.com/api/10.x/Illuminate/Validation/ValidationException.html).
+
+```php
+$validator = Validator::make($data, $rules);
+
+try {
+    $validator->validate();
+    $this->fail("ValidationException not thrown");
+
+} catch (ValidationException $exception) {
+    $this->assertNotNull($exception->validator);
+    $message = $exception->validator->errors();
+
+    Log::error($message->toJson(JSON_PRETTY_PRINT));
+}
+```

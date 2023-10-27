@@ -34,6 +34,9 @@ Laravel has the most extensive and thorough [documentation](https://laravel.com/
 -   [Run Validation](#run-validation)
 -   [Error Message](#error-message)
 -   [Validation Exception](#validation-exception)
+-   [Validation Rules](#validation-rules)
+-   [Valid Data](#valid-data)
+-   [Validation Message](#validation-message)
 
 <hr>
 <br>
@@ -135,3 +138,68 @@ try {
     Log::error($message->toJson(JSON_PRETTY_PRINT));
 }
 ```
+
+## Validation Rules
+
+-   Salah satu keuntungan menggunakan Laravel Validator, yaitu sudah disediakan aturan-aturan yang bisa kita gunakan untuk melakukan validasi
+-   Kita bisa lihat di halaman dokumentasi untuk melihat detail aturan-aturan yang sudah disediakan di Laravel untuk validasi
+-   https://laravel.com/docs/10.x/validation#available-validation-rules
+-   Bagaimana jika aturan yang kita butuhkan tidak ada? Kita juga bisa membuat aturan sendiri, yang akan dibahas di materi terpisah
+
+**Multiple Rules**
+
+-   Saat kita membuat validasi, biasanya dalam satu attribute, kita sering menggunakan beberapa aturan
+-   Misal untuk username, kita ingin menggunakan aturan wajib diisi, harus email, dan panjang tidak boleh lebih dari 100 karakter
+-   Untuk menggunakan multiple Rules, kita bisa menggunakan tanda | (pagar), atau menggunakan tipe data array
+
+```php
+$data = [
+    'username' => 'ucup',
+    'password' => 'ucup'
+];
+
+$rules = [
+    'username' => 'required|email|max:100',
+    'password' => ['required', 'min:6', 'max:20']
+];
+
+$validator = Validator::make($data, $rules);
+$this->assertNotNull($validator);
+
+$this->assertFalse($validator->passes());
+$this->assertTrue($validator->fails());
+```
+
+## Valid Data
+
+-   Laravel Validator bisa mengembalikan data yang berisikan hanya attribute yang di validasi
+-   Hal ini sangat cocok ketika kita memang tidak ingin menggunakan attribute yang tidak di validasi
+-   Untuk mendapatkan data tersebut, kita bisa mengguanakan return value `validated()`
+
+```php
+$data = [
+    'username' => 'admin@yahoo.com',
+    'password' => 'adminpassword',
+    'admin' => true
+];
+
+$rules = [
+    'username' => 'required|email|max:100',
+    'password' => 'required|min:6|max:20'
+];
+
+$validator = Validator::make($data, $rules);
+$this->assertNotNull($validator);
+
+try {
+    $valid = $validator->validate();
+    Log::info(json_encode($valid, JSON_PRETTY_PRINT));
+} catch (ValidationException $exception) {
+    $this->assertNotNull($exception->validator);
+    $message = $exception->validator->errors();
+
+    Log::error($message->toJson(JSON_PRETTY_PRINT));
+}
+```
+
+> Reference by [Programmer Zaman Now](https://programmerzamannow.com)

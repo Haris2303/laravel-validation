@@ -37,6 +37,9 @@ Laravel has the most extensive and thorough [documentation](https://laravel.com/
 -   [Validation Rules](#validation-rules)
 -   [Valid Data](#valid-data)
 -   [Validation Message](#validation-message)
+-   [Additional Validation](#additional-validation)
+-   [Custom Rule](#custom-rule)
+-   [Custom Function Rule](#custom-function-rule)
 
 <hr>
 <br>
@@ -201,5 +204,118 @@ try {
     Log::error($message->toJson(JSON_PRETTY_PRINT));
 }
 ```
+
+## Validation Message
+
+-   Setiap Rule di Laravel Validator, memiliki validation message
+-   Secara default, message-nya menggunakan bahasa inggris, namun kita bisa mengubahnya jika kita mau
+-   Semua message di Laravel akan disimpan di dalam folder `lang/{locale}`
+-   Jika belum ada folder dan file nya, kita bisa gunakan perintah dibawah ini untuk membuat default message:
+
+          php artisan lang:publish
+
+-   Validation message, terdapat di file `validation.php`
+
+**Custom Message untuk Attribute**
+
+-   Kadang, pada beberapa kasus, kita tidak ingin menggunakan default message saat melakukan validasi
+-   Kita bisa menambahkan Costum Message untuk Attribute, di file `validation.php`
+
+```php
+'custom' => [
+    'username' => [
+        'email' => 'We only accept email address for username'
+    ]
+]
+```
+
+**Localization**
+
+-   Message di Laravel, mendukung multi bahasa
+-   Caranya kita cukup membuat folder dengan kode locale pada folder lang, dan buat file php validation yang berisi attribute nama
+-   Kita bisa mengubah nilai message nya, sesuai dengan bahasanya
+-   Untuk mengaktifkan bahasa yang ingin kita gunakan, kita bisa gunakan Facade `App::setLocale()`
+-   Jika locale yang kita pilih tidak tersedia, maka secara otomatis akan menggunakan default locale
+
+```php
+\Illuminate\Support\Facades\App::setLocale('id');
+
+$data = [
+    'username' => 'ucup',
+    'password' => 'ucup'
+];
+$rules = [
+    'username' => 'required|email|max:100',
+    'password' => 'required|min:6|max:20'
+];
+
+$validator = Validator::make($data, $rules);
+```
+
+**Inline Message**
+
+-   Kadang, mengubah message file di folder lang mungkin terlalu ribet
+-   Kita bisa menambahkan message pada parameter ketika saat membuat Validator menggunakan `Validator::make(data, rules, message)`
+-   Secara otomatis, Validator akan mengambil message yang terdapat parameter messages, dan jika tidak ada, maka akan mengambil dari folder lang
+
+```php
+$data = [
+    'username' => 'ucup',
+    'password' => 'ucup'
+];
+
+$rules = [
+    'username' => 'required|email|max:100',
+    'password' => ['required', 'min:6', 'max:20']
+];
+
+$message = [
+    'required' => ':attribute harus diisi',
+    'email' => ':attribute harus berupa email',
+    'min' => ':attribute minimal :min karakter',
+    'max' => ':atrribute maksimal :max karakter'
+];
+
+$validator = Validator::make($data, $rules, $message);
+```
+
+## Additional Validation
+
+-   Saat kita selesai melakukan validasi, kadang kita ingin melakukan validasi tambahan
+-   Pada kasus seperti ini, kita bisa menggunakan method `after(callback)`, dimana kita bisa menambahkan function callback sebagai parameter
+-   Function callback nya terdapat satu parameter yaitu Validator, sehingga kita bisa menambahkan error tambahan jika dibutuhkan
+
+```php
+$data = [
+    'username' => 'ucup@yahoo.com',
+    'password' => 'ucup@yahoo.com'
+];
+
+$rules = [
+    'username' => 'required|email|max:100',
+    'password' => ['required', 'min:6', 'max:20']
+];
+
+$validator = Validator::make($data, $rules);
+$validator->after(function (\Illuminate\Validation\Validator $validator) {
+    // ambil data di validator
+    $data = $validator->getData();
+    if ($data['username'] === $data['password']) {
+        // menambahkan error
+        $validator->errors()->add('password', 'Password tidak boleh sama dengan username');
+    }
+});
+```
+
+## Custom Rule
+
+-   Walaupun Rule di Laravel sudah tersedia banyak
+-   Kadang, pada beberapa kasus, kita perlu membuat Custom Rule sendiri
+-   Misal untuk mengecek data ke database, dan lain-lain
+-   Untuk membuat rule, kita bisa menggunakan perintah
+
+        php artisan make:rule NamaRule
+
+<br><br>
 
 > Reference by [Programmer Zaman Now](https://programmerzamannow.com)

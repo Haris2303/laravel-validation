@@ -82,6 +82,7 @@ class ValidatorTest extends TestCase
 
     public function testValidatorMultipleRules()
     {
+        \Illuminate\Support\Facades\App::setlocale('id');
         $data = [
             'username' => 'ucup',
             'password' => 'ucup'
@@ -129,5 +130,66 @@ class ValidatorTest extends TestCase
 
             Log::error($message->toJson(JSON_PRETTY_PRINT));
         }
+    }
+
+    public function testValidatorInlineMessage()
+    {
+        $data = [
+            'username' => 'ucup',
+            'password' => 'ucup'
+        ];
+
+        $rules = [
+            'username' => 'required|email|max:100',
+            'password' => ['required', 'min:6', 'max:20']
+        ];
+
+        $message = [
+            'required' => ':attribute harus diisi',
+            'email' => ':attribute harus berupa email',
+            'min' => ':attribute minimal :min karakter',
+            'max' => ':atrribute maksimal :max karakter'
+        ];
+
+        $validator = Validator::make($data, $rules, $message);
+        $this->assertNotNull($validator);
+
+        $this->assertFalse($validator->passes());
+        $this->assertTrue($validator->fails());
+
+        $message = $validator->getMessageBag();
+        $message->keys();
+
+        Log::info($message->toJson(JSON_PRETTY_PRINT));
+    }
+
+    public function testValidatorAdditionalValidation()
+    {
+        $data = [
+            'username' => 'ucup@yahoo.com',
+            'password' => 'ucup@yahoo.com'
+        ];
+
+        $rules = [
+            'username' => 'required|email|max:100',
+            'password' => ['required', 'min:6', 'max:20']
+        ];
+
+        $validator = Validator::make($data, $rules);
+        $validator->after(function (\Illuminate\Validation\Validator $validator) {
+            $data = $validator->getData();
+            if ($data['username'] === $data['password']) {
+                $validator->errors()->add('password', 'Password tidak boleh sama dengan username');
+            }
+        });
+        $this->assertNotNull($validator);
+
+        $this->assertFalse($validator->passes());
+        $this->assertTrue($validator->fails());
+
+        $message = $validator->getMessageBag();
+        $message->keys();
+
+        Log::info($message->toJson(JSON_PRETTY_PRINT));
     }
 }

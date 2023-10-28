@@ -40,6 +40,10 @@ Laravel has the most extensive and thorough [documentation](https://laravel.com/
 -   [Additional Validation](#additional-validation)
 -   [Custom Rule](#custom-rule)
 -   [Custom Function Rule](#custom-function-rule)
+-   [Rule Classes](#rule-classes)
+-   [Nested Array Validation](#nested-array-validation)
+-   [HTTP Request Validation](#http-request-validation)
+-   [Error Page](#error-page)
 
 <hr>
 <br>
@@ -315,6 +319,243 @@ $validator->after(function (\Illuminate\Validation\Validator $validator) {
 -   Untuk membuat rule, kita bisa menggunakan perintah
 
         php artisan make:rule NamaRule
+
+Contoh kita membuat rule untuk Uppercase:
+
+    php artisan make:rule Uppercase
+
+Lalu buat kode untuk rule nya:
+
+```php
+class Uppercase implements ValidationRule
+{
+    /**
+     * Run the validation rule.
+     *
+     * @param  \Closure(string): \Illuminate\Translation\PotentiallyTranslatedString  $fail
+     */
+    public function validate(string $attribute, mixed $value, Closure $fail): void
+    {
+        // if value not uppercase
+        if ($value !== strtoupper($value)) {
+            $fail("The $attribute must be UPPERCASE");
+        }
+    }
+}
+```
+
+Cara menggunakan:
+
+```php
+$data = [
+    'username' => 'ucup@yahoo.com',
+    'password' => 'ucup@yahoo.com'
+];
+
+$rules = [
+    'username' => ['required', 'email', 'max:100', new \App\Rules\Uppercase()],
+    'password' => ['required', 'min:6', 'max:20']
+];
+
+$validator = Validator::make($data, $rules);
+```
+
+**Translation**
+
+-   Saat membuat Custom Rule, di function validate terdapat parameter ke-3 berupa Closure
+-   Closure tersebut jika dipanggil, maka akan mengembalikan object `PotentiallyTranslatedString`
+-   *https://laravel.com/api/10.x/Illuminate/Translation/PotentiallyTranslatedString.html*
+-   Dengan Class itu, kita bisa membuat translation
+
+Kode untuk translate rule validation
+
+```php
+public function validate(string $attribute, mixed $value, Closure $fail): void
+{
+    if ($value !== strtoupper($value)) {
+        $fail("validation.custom.uppercase")->translate([
+            'attribute' => $attribute,
+            'value' => $value
+        ]);
+    }
+}
+```
+
+Setelah itu tambahkan `custom.uppercase` ke dalam file `validation.php`
+
+```php
+'custom.uppercase' => 'The :attribute field with value :value must be UPPERCASE',
+```
+
+**Data Aware dan Validator Aware**
+
+-   Saat kita membutuhkan Custom Rule yang membutuhkan bisa melihat seluruh data yang di validasi, kita bisa implement interface `DataAwareRule`
+-   Dan jika kita butuh object Validator, kita bisa implement interface `ValidatorAwareRule`
+
+Kita coba membuat Rule Registration
+
+```bash
+php artisan make:rule RegistrationRule
+```
+
+Kode dari file `RegistrationRule.php` dengan mengimplementasikan `DataAwareRule` dan `ValidatorAwareRule`:
+
+```php
+class RegistrationRule implements ValidationRule, DataAwareRule, ValidatorAwareRule
+{
+    private array $data;
+    private Validator $validator;
+
+    public function setData(array $data): RegistrationRule
+    {
+        $this->data = $data;
+        return $this;
+    }
+
+    public function setValidator(Validator $validator): RegistrationRule
+    {
+        $this->validator = $validator;
+        return $this;
+    }
+
+    /**
+     * Run the validation rule.
+     *
+     * @param  \Closure(string): \Illuminate\Translation\PotentiallyTranslatedString  $fail
+     */
+    public function validate(string $attribute, mixed $value, Closure $fail): void
+    {
+        $password = $value;
+        $username = $this->data['username'];
+
+        if ($password == $username) {
+            $fail("The $attribute must be different with username");
+        }
+    }
+}
+```
+
+Cara menggunakan:
+
+```php
+$rules = [
+    'username' => ['required', 'email', 'max:100', new \App\Rules\Uppercase()],
+    'password' => ['required', 'min:6', 'max:20', new \App\Rules\RegistrationRule()]
+];
+```
+
+## Custom Function Rule
+
+-   Pada kasus tertentu kita perlu membuat Custom Rule, namun jika membuat Class Rule terlalu berlebihan, kita bisa menggunakan Custom Function Rule ketika membuat Rule
+-   Kita cukup gunakan Function dimana terdapat 3 parameter, `$attribute`, `$value`, dan `$fail`
+
+Cara menggunakan:
+
+```php
+$rules = [
+    'username' => ['required', 'email', 'max:100', function (string $attribute, string $value, \Closure $fail) {
+        if ($value !== strtoupper($value)) {
+            $fail("The field $attribute must be UPPERCASE");
+        }
+    }],
+];
+```
+
+## Rule Classes
+
+-   Laravel menyediakan beberapa class Rule yang bisa kita gunakan ketika membuat Validator
+-   Kita bisa lihat daftar class-class Rule yang tersedia di package `Rules`
+-   *https://laravel.com/10.x/Illuminate/Validation/Rules.html*
+
+Cara menggunakan:
+
+```php
+$data = [
+    'username' => 'Otong',
+    'password' => 'otong1@yahoo.com'
+];
+
+$rules = [
+    'username' => ['required', new \Illuminate\Validation\Rules\In(["Asep", "Bambang", "Otong"])],
+    'password' => ['required', \Illuminate\Validation\Rules\Password::min(6)->letters()->numbers()->symbols()]
+];
+
+$validator = Validator::make($data, $rules);
+```
+
+## Nested Array Validation
+
+-   Saat kita melakukan validasi, kadang data yang kita validasi tidak hanya berformat key-value
+-   Kadang terdapat nested array, misal terdapat key address, dimana di dalamnya berisi array lagi
+-   Pada kasus data jenis nested array, kita bisa membuat Rule menggunakan tanda `.` (titik), misal `address.street`, `address.city`, dan lain-lain
+-   Jika masih terdapat nested array, kita bisa tambahkan `.` (titik) lagi
+
+Cara menggunakan:
+
+```php
+$data = [
+    'name' => [
+        'first' => 'Otong',
+        'last' => 'Surotong'
+    ],
+    'address' => [
+        'street' => 'Jl.Danau Maninjau',
+        'city' => 'Kota Sorong'
+    ]
+];
+
+$rules = [
+    'name.first' => ['required', 'max:100'],
+    'name.last' => 'max:100',
+    'address.street' => 'max:150',
+    'address.city' => ['required', 'max:100']
+];
+
+$validator = Validator::make($data, $rules);
+```
+
+**Indexed Array Validation**
+
+-   Pada beberapa kasus, misal nested array nya adalah indexed, artinya bisa lebih dari satu
+-   Pada kasus ini, kita tidak menggunakan `.` (titik), melainkan menggunakan `*` (bintang)
+
+Cara menggunakan:
+
+```php
+$data = [
+    'name' => [
+        'first' => 'Otong',
+        'last' => 'Surotong'
+    ],
+    'address' => [
+        [
+            'street' => 'Jl. Durian',
+            'city' => 'Kota Sorong'
+        ],
+        [
+            'street' => 'Jl. Nanas ',
+            'city' => 'Kota Sorong'
+        ]
+    ]
+];
+
+$rules = [
+    'name.first' => ['required', 'max:100'],
+    'name.last' => 'max:100',
+    'address.*.street' => 'max:150',
+    'address.*.city' => ['required', 'max:100']
+];
+
+$validator = Validator::make($data, $rules);
+```
+
+## HTTP Request Validation
+
+-   Laravel Validator sudah terintegrasi baik dengan HTTP Request di Laravel
+-   Class Request memiliki method `validate()` untuk melakukan validasi data request yang dikirim oleh User, misal dari Form atau Query Parameter
+-   *https://laravel.com/api/10.x/Illuminate/Http/Request.html#method_validate*
+
+## Error Page
 
 <br><br>
 

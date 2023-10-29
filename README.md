@@ -44,6 +44,9 @@ Laravel has the most extensive and thorough [documentation](https://laravel.com/
 -   [Nested Array Validation](#nested-array-validation)
 -   [HTTP Request Validation](#http-request-validation)
 -   [Error Page](#error-page)
+-   [Error Directive](#error-directive)
+-   [Repopulating Forms](#repopulating-forms)
+-   [Custom Request](#custom-request)
 
 <hr>
 <br>
@@ -555,8 +558,273 @@ $validator = Validator::make($data, $rules);
 -   Class Request memiliki method `validate()` untuk melakukan validasi data request yang dikirim oleh User, misal dari Form atau Query Parameter
 -   *https://laravel.com/api/10.x/Illuminate/Http/Request.html#method_validate*
 
+Andaikan kita membuat sebuah class `FormController`:
+
+```bash
+php artisan make:controller FormController
+```
+
+Kode `FormController`
+
+```php
+public function login(Request $request): Response
+{
+    try {
+        $rules = [
+            'username' => 'required',
+            'password' => 'required'
+        ];
+
+        $data = $request->validate($rules);
+        // data
+
+        return response("OKE", Response::HTTP_OK);
+    } catch (ValidationException $validationException) {
+        return response($validationException->errors(), Response::HTTP_BAD_REQUEST);
+    }
+}
+```
+
+Tambahkan Route di `web.php`:
+
+```php
+Route::post('/form/login', [\App\Http\Controllers\FormController::class, 'login']);
+```
+
+Coba test `FormController`
+
+```php
+public function testLoginFailed()
+{
+    $this->post('/form/login', [
+        'username' => '',
+        'password' => ''
+    ])->assertStatus(400);
+}
+
+public function testLoginSuccess()
+{
+    $response = $this->post('/form/login', [
+        'username' => 'ucup',
+        'password' => 'ucup'
+    ]);
+
+    $response->assertStatus(200);
+}
+```
+
 ## Error Page
+
+-   Saat kita membuat Web, dan menerima input data yang tidak valid, kadang kita ingin menampilkan error message di halaman web nya
+-   Kita bisa dengan mudah menampilkan error dari `MessageBag` di Laravel Blade Template
+-   Kita cukup menggunakan variabel `$errors` di Blade Template
+-   *https://laravel.com/api/10.x/Illuminate/Support/MessageBag.html*
+
+**Alur Validation Error di Web**
+
+-   Saat kita membuat form, biasanya kita akan membuat dua halaman, Pertama GET `/form` untuk menampilkan form nya, dan POST `/form` untuk melakukan submit form nya
+-   Jika terjadi error ketika melalukan POST `/form`, dan terjadi error `ValidationException`, secara otomatis Laravel akan melakukan redirect ke halaman sebelumnya, yaitu GET `/form`
+-   Saat melakukan redirect kembali ke halaman GET `/form`, Laravel akan menyisipkan informasi sementara object error tersebut ke Session
+-   Middleware `ShareErrorsFromSession` akan mendeteksi errors tersebut dan melakukan sharing informasi ke View sehingga kita bisa dengan mudah menggunakan variable `$errors` di Blade Template
+
+Misal kita membuat kode di `FormController`:
+
+```php
+public function form(): Response
+{
+    return response()->view('form');
+}
+
+public function submitForm(Request $request): Response
+{
+    $data = $request->validate([
+        'username' => 'required',
+        'password' => 'required'
+    ]);
+
+    return response($data, Response::HTTP_OK);
+}
+```
+
+Kemudian kita tambahkan route di `web.php`
+
+```php
+Route::get('/form', [\App\Http\Controllers\FormController::class, 'form']);
+Route::post('/form', [\App\Http\Controllers\FormController::class, 'submitForm']);
+```
+
+Setelah itu kita buat blade template
+
+```php
+@if($errors->any())
+    <ul>
+        @foreach ($errors->all() as $error)
+            <li>{{ $error }}</li>
+        @endforeach
+    </ul>
+@endif
+
+<form action="/form" method="POST">
+    @csrf
+    <label for="username">username</label>
+    <input type="text" id="username" name="username"> <br>
+    <label for="password">Password</label>
+    <input type="text" id="password" name="password"> <br>
+    <button type="submit">Login</button>
+</form>
+```
+
+Kita test untuk form nya
+
+```php
+public function testFormFailed()
+{
+    $this->post('/form', [
+        'username' => '',
+        'password' => ''
+    ])->assertStatus(302);
+}
+
+public function testFormSuccess()
+{
+    $response = $this->post('/form', [
+        'username' => 'ucup',
+        'password' => 'ucup'
+    ]);
+
+    $response->assertStatus(200);
+}
+```
+
+## Error Directive
+
+-   Selain menggunakan variable `$errors`, untuk mendapatkan error by key
+-   Kita bisa menggunakan directive `@error(key)`
+
+Contoh penggunaan:
+
+```php
+<form action="/form" method="POST">
+    @csrf
+    <label for="username">username : @error('username') {{ $message }} @enderror</label>
+    <input type="text" id="username" name="username"> <br>
+    <label for="password">Password : @error('password') {{ $message }} @enderror</label>
+    <input type="text" id="password" name="password"> <br>
+    <button type="submit">Login</button>
+</form>
+```
+
+## Repopulating Forms
+
+-   Saat kita melalukan submit form, lalu terjadi error validasi, kadang kita tidak ingin menghapus data sebelumnya yang sudah di input
+-   Untungnya, ketika terjadi `ValidationException`, Laravel menyimpan data yang dikirim ke Session juga sementara
+-   Kita bisa menggunakan method `old()` di Request, atau global function old di Blade Template untuk mendapatkan data lama
+
+Contoh penggunaan:
+
+```php
+<form action="/form" method="POST">
+    @csrf
+    <label for="username">username : @error('username') {{ $message }} @enderror</label>
+    <input type="text" id="username" name="username" value="{{ old('username') }}"> <br>
+    <label for="password">Password : @error('password') {{ $message }} @enderror</label>
+    <input type="text" id="password" name="password" value="{{ old('password') }}"> <br>
+    <button type="submit">Login</button>
+</form>
+```
+
+## Custom Request
+
+-   Saat kita membuat form request yang kompleks, ada baiknya kita membuat class sendiri untuk Form Request tersebut
+-   Salah satu kelebihannya dengan membuat form request sendiri, bisa diintegrasikan dengan Laravel Validator
+-   Hal ini membuat kode yang kita buat lebih rapi, karena data Request dan Validasi terpisah dari kode Controller
+
+**Membuat Form Request**
+
+-   Untuk membuat Form Request sendiri, kita bisa menggunakan perintah
+
+```bash
+php artisan make:request NamaFormRequest
+```
+
+-   Walaupun namanya Form Request, namun sebenarnya kita tetap bisa menggunakan ketika misal kita ingin menerima data dan bentuk JSON misalnya
+
+Membuat file `LoginRequest.php`
+
+```bash
+php artisan make:request LoginRequest
+```
+
+**FormRequest Class**
+
+-   Form Request adalah class turunan dari `FormRequest`
+-   *https://laravel.com/api/10.x/Illuminate/Foundation/Http/FormRequest.html*
+-   Untuk menambahkan Rule untuk validasi, kita bisa menggunakan method `rules()`
+-   Untuk menambahkan Additional Validator setelah validasi, kita bisa gunakan method `after()`
+-   Jika ingin berhenti melakukan validasi, setelah terdapat satu attribute yang error, kita bisa gunakan property `$stopOnFirstFailure`
+-   Jika ingin mengubah halaman redirect ketika terjadi `ValidationException`, kita bisa gunakan property `$redirect` (URL) atau `$redirectRoute` (Route)
+-   Jika ingin menambahkan authentication sebelum melakukan Validasi, kita bisa menggunakan method `authorize()`
+-   Untuk mengubah default message, kita bisa menggunakan method `messages()`
+-   Untuk mengubah default nama attribute, kita bisa menggunakan method `attributes()`
+
+Kode `LoginRequest`:
+
+```php
+class LoginRequest extends FormRequest
+{
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'username' => ['required', 'email', 'max:100'],
+            'password' => ['required', Password::min(6)->letters()->numbers()->symbols()]
+        ];
+    }
+}
+```
+
+Setelah itu ubah `FormController` dari parameter `Request` menjadi `LoginRequest`:
+
+```php
+public function submitForm(LoginRequest $request): Response
+{
+    $data = $request->validated();
+
+    return response($data, Response::HTTP_OK);
+}
+```
+
+**Before dan After Validation**
+
+-   Jika kita ingin melakukan sesuatu sebelum melakukan validasi, misal membersihkan data yang tidak dibutuhkan, kita bisa menggunakan method `prepareForValidation()`
+-   Sedangkan jika kita ingin melakukan sesuai sesudah validasi, kita bisa menggunakan method `passedValidation()`
+
+Contoh penggunaan:
+
+```php
+protected function prepareForValidation(): void
+{
+    $this->merge([
+        'username' => strtolower($this->input('username'))
+    ]);
+}
+
+protected function passedValidation(): void
+{
+    $this->merge([
+        'password' => bcrypt($this->input('password'))
+    ]);
+}
+```
 
 <br><br>
 
 > Reference by [Programmer Zaman Now](https://programmerzamannow.com)
+
+```
+
+```
